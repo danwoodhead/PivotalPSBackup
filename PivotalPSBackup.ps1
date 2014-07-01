@@ -1,14 +1,23 @@
 [System.Reflection.Assembly]::LoadWithPartialName("System.Web.Extensions")
 $ser = New-Object System.Web.Script.Serialization.JavaScriptSerializer
 
-$apiToken = Get-Content .\token.txt # text file containing your token
+function GetPivotalToken {
+  # text file containing your token
+  Return Get-Content .\token.txt 
+}
+
+function GetPivotalProjects {
+  # from http://stackoverflow.com/questions/10743892/loading-a-powershell-hashtable-from-a-file
+  # powershell hashtable of project ids and a chosen names e.g. @{1234567 = "project1"; 7654321 = "project2"}
+  Return  gc .\projects.pson | Out-String | iex
+  #Return @{1012782 = "my_work"}
+}
+
+$apiToken = GetPivotalToken
 $dateStamp = get-date -f yyyyMMddTHHmmss
 $rootPath = "D:\danny boy\backup\pivotal"
 $limit = 500
-
-# from http://stackoverflow.com/questions/10743892/loading-a-powershell-hashtable-from-a-file
-# powershell hashtable of project ids and a chosen names e.g. @{1234567 = "project1"; 7654321 = "project2"}
-$projects =  gc .\projects.pson | Out-String | iex
+$projects =  GetPivotalProjects
 
 # by default in v5 you don't get tasks or comments
 # also only first 100, max limit is 500...
