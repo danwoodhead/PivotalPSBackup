@@ -13,25 +13,38 @@ function GetPivotalProjects {
   #Return @{1012782 = "my_work"}
 }
 
+function GetUrl {
+  param($projectId,$limit,$offset)
+  # by default in v5 you don't get tasks or comments
+  # also only first 100, max limit is 500...
+  Return "https://www.pivotaltracker.com/services/v5/projects/$projectId/stories/?fields=name,estimate,description,story_type,created_at,current_state,accepted_at,url,labels(name),tasks(description,complete),comments(text)&limit=$limit&envelope=true&offset=$offset"
+}
+
 $apiToken = GetPivotalToken
-$dateStamp = get-date -f yyyyMMddTHHmmss
-$rootPath = "D:\danny boy\backup\pivotal"
-$limit = 500
+$dateStamp = get-date -f yyyyMMddTHHmmss    # only used once
+$rootPath = "D:\danny boy\backup\pivotal"   # only used once
+$limit = 500 # max the api will return, rename to upper limit
 $projects =  GetPivotalProjects
 
-# by default in v5 you don't get tasks or comments
-# also only first 100, max limit is 500...
-# &filter= from https://www.pivotaltracker.com/help/faq#howcanasearchberefined
-$queryString = "/stories/?fields=name,estimate,description,story_type,created_at,current_state,accepted_at,url,labels(name),tasks(description,complete),comments(text)&limit=$limit&envelope=true"
-
-
 foreach ($projectId in $projects.Keys) {
-  $output = "$rootPath\$($projects.Item($projectId)).$dateStamp.json"
+  $offset = 0
 
-  $stories = curl -k -H "X-TrackerToken: $apiToken" -X GET https://www.pivotaltracker.com/services/v5/projects/$projectId$queryString
+  <# call a function to get the total stories
+  $remaining = $total
+  $stories = [] # ?? needed for scope??
+
+  while ($remaining -gt 0) {
+    # limit just a local variable here
+    if ($remaining -lt $upperlimit) then $limit = $remaining else $limit = $upperlimit
+    $stories = $stories + (curl -k -H "X-TrackerToken: $apiToken" -X GET (GetUrl $projectId $limit $offset))
+    $offset = $offset + $limit
+    $remaining = $remaining - $limit
+  }
+  #>
+
+  $stories = curl -k -H "X-TrackerToken: $apiToken" -X GET (GetUrl $projectId $limit $offset)
   $storiesAsJson = $ser.DeserializeObject($stories)
   $total = $storiesAsJson.pagination.total
-  $offset = $storiesAsJson.pagination.offset
   $remaining = $total - $limit
 
   # so, if < 500 stories then do once
@@ -39,15 +52,12 @@ foreach ($projectId in $projects.Keys) {
   while ($remaining -gt 0) {
     # offset for querystring
     $offset = $offset + $limit # so 500, 1000 etc.  might change to 501, 1001 etc if get dupes
-    
-    #todo do in one line
-    $offsetQueryString = "&offset=$offset"
-    $temp = curl -k -H "X-TrackerToken: $apiToken" -X GET https://www.pivotaltracker.com/services/v5/projects/$projectId$queryString$offsetQueryString
-    $stories = $stories + $temp
+
+    $stories = $stories + (curl -k -H "X-TrackerToken: $apiToken" -X GET (GetUrl $projectId $limit $offset))
 
     # decrement by limit
     $remaining = $remaining - $limit
   }
 
-  $stories > $output
+  $stories > "$rootPath\$($projects.Item($projectId)).$dateStamp.json"
 }
